@@ -1,52 +1,50 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Глобальная карта — Варгейм</title>
-    <link rel="stylesheet" href="style.css">
-    <!-- Leaflet CSS -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Мировая карта — Варгейм</title>
+  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 </head>
 <body>
-    <div id="app">
-        <!-- Боковая панель -->
-        <aside id="sidebar">
-            <h1>⚔️ Варгейм</h1>
-            <div class="panel">
-                <h2>Выбранная территория</h2>
-                <div id="info">
-                    <p class="muted">Кликните по региону на карте</p>
-                </div>
-            </div>
+  <div id="app">
+    <header id="hud">
+      <div class="hud-block">
+        <span class="label">Ход:</span>
+        <span id="turn">1</span>
+      </div>
+      <div class="hud-block">
+        <span class="label">Игрок:</span>
+        <span id="player">Игрок 1</span>
+      </div>
+      <div class="hud-block">
+        <span class="label">Ресурсы:</span>
+        <span id="resources">1000</span>
+      </div>
+      <div class="hud-block">
+        <span class="label">Выбранный регион:</span>
+        <span id="selected-region">—</span>
+      </div>
+    </header>
 
-            <div class="panel">
-                <h2>Действия</h2>
-                <button id="btn-attack" class="action attack">⚔️ Атаковать</button>
-                <button id="btn-move"   class="action move">🚀 Перебросить войска</button>
-                <button id="btn-fortify" class="action fortify">🛡️ Укрепить</button>
-                <button id="btn-reset"  class="action reset">🔄 Сбросить</button>
-            </div>
+    <div id="map"></div>
 
-            <div class="panel">
-                <h2>Слои</h2>
-                <label><input type="checkbox" id="toggle-borders" checked> Границы</label>
-                <label><input type="checkbox" id="toggle-units" checked> Юниты</label>
-                <label><input type="checkbox" id="toggle-grid"> Сетка</label>
-            </div>
+    <aside id="panel">
+      <h2 id="region-name">Выберите регион</h2>
+      <div id="region-info">
+        <p><b>Владелец:</b> <span id="region-owner">—</span></p>
+        <p><b>Ресурсы:</b> <span id="region-resources">—</span></p>
+        <p><b>Гарнизон:</b> <span id="region-units">—</span></p>
+      </div>
+      <div class="actions">
+        <button id="btn-move">Переместить войска</button>
+        <button id="btn-end-turn">Завершить ход</button>
+      </div>
+    </aside>
+  </div>
 
-            <div class="panel">
-                <h2>Лог событий</h2>
-                <ul id="log"></ul>
-            </div>
-        </aside>
-
-        <!-- Карта -->
-        <main id="map"></main>
-    </div>
-
-    <!-- Leaflet JS -->
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script src="script.js"></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="script.js"></script>
 </body>
 </html>
