@@ -2,204 +2,145 @@
 <html lang="ru">
 <head>
 <meta charset="UTF-8">
-<title>Global Map — Natural Earth 50m</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Global Map — Wargame</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
-    background: #05080f;
-    color: #c9d1d9;
+    background: #05080f; color: #c9d1d9;
     font-family: 'Courier New', monospace;
-    overflow: hidden;
-    height: 100vh;
-    display: flex;
-    flex-direction: column;
+    overflow: hidden; height: 100vh;
+    display: flex; flex-direction: column;
   }
   #ui {
-    padding: 8px 16px;
-    background: #0e1626;
+    padding: 8px 12px; background: #0e1626;
     border-bottom: 1px solid #1e2a44;
-    display: flex;
-    gap: 10px;
-    align-items: center;
-    font-size: 12px;
-    z-index: 10;
-    flex-wrap: wrap;
+    display: flex; gap: 8px; align-items: center;
+    font-size: 12px; z-index: 10; flex-wrap: wrap;
   }
   #ui button {
-    background: #16233c;
-    color: #c9d1d9;
+    background: #16233c; color: #c9d1d9;
     border: 1px solid #2a3a5c;
-    padding: 5px 12px;
-    cursor: pointer;
-    font-family: inherit;
-    font-size: 11px;
+    padding: 5px 10px; cursor: pointer;
+    font-family: inherit; font-size: 11px;
     border-radius: 3px;
-    transition: all 0.15s;
   }
-  #ui button:hover { background: #223354; border-color: #4a6aa0; }
+  #ui button:hover { background: #223354; }
   #ui button.active { background: #2a4a8c; border-color: #5a8adc; color: #fff; }
-  #info { margin-left: auto; color: #6a7a90; }
+  #info { margin-left: auto; color: #6a7a90; font-size: 11px; }
   #map-container { flex: 1; position: relative; overflow: hidden; }
-  canvas { display: block; cursor: grab; image-rendering: auto; }
+  canvas { display: block; cursor: grab; touch-action: none; }
   canvas:active { cursor: grabbing; }
   #tooltip {
-    position: absolute;
-    background: rgba(8, 12, 22, 0.96);
-    border: 1px solid #2a3a5c;
-    padding: 10px 14px;
-    font-size: 11px;
-    pointer-events: none;
-    border-radius: 3px;
-    display: none;
-    z-index: 20;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.7);
-    line-height: 1.6;
-    max-width: 280px;
+    position: absolute; background: rgba(8,12,22,0.96);
+    border: 1px solid #2a3a5c; padding: 8px 12px;
+    font-size: 11px; pointer-events: none;
+    border-radius: 3px; display: none; z-index: 20;
+    line-height: 1.5; max-width: 240px;
   }
-  #tooltip b { color: #5a9aed; font-size: 13px; }
+  #tooltip b { color: #5a9aed; }
   #loading {
-    position: absolute;
-    inset: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: #05080f;
-    color: #5a7aad;
-    font-size: 14px;
-    z-index: 30;
-    flex-direction: column;
-    gap: 14px;
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    background: #05080f; color: #5a7aad;
+    font-size: 13px; z-index: 30;
+    flex-direction: column; gap: 12px; padding: 20px; text-align: center;
   }
   #loading .bar {
-    width: 240px; height: 3px;
-    background: #1a2540; border-radius: 2px;
-    overflow: hidden;
+    width: 220px; height: 3px;
+    background: #1a2540; border-radius: 2px; overflow: hidden;
   }
   #loading .bar > div {
     height: 100%; width: 0%;
-    background: linear-gradient(90deg, #4a8adc, #6ab0ff);
+    background: linear-gradient(90deg,#4a8adc,#6ab0ff);
     transition: width 0.2s;
-  }
-  #fps {
-    color: #4a7aad;
-    font-size: 11px;
-    margin-left: 10px;
   }
 </style>
 </head>
 <body>
 
 <div id="ui">
-  <button id="btnRegenerate">🔄 Перекрасить</button>
-  <button id="btnLabels" class="active">🏷 Страны</button>
-  <button id="btnGrid">📐 Сетка</button>
-  <button id="btnBorders" class="active">▦ Границы</button>
-  <button id="btnReset">🎯 Сброс</button>
-  <span id="fps"></span>
-  <span id="info">Загрузка 50m GeoJSON...</span>
+  <button id="btnRegenerate">🔄</button>
+  <button id="btnLabels" class="active">🏷</button>
+  <button id="btnGrid">📐</button>
+  <button id="btnReset">🎯</button>
+  <span id="info">Загрузка карты...</span>
 </div>
 
 <div id="map-container">
   <canvas id="map"></canvas>
   <div id="tooltip"></div>
   <div id="loading">
-    <div>Загрузка Natural Earth 50m...</div>
+    <div>Загрузка карты мира 50m...</div>
     <div class="bar"><div id="loadbar"></div></div>
-    <div id="loadmsg" style="font-size:11px;color:#3a5a80">~5 МБ, подожди немного</div>
+    <div id="loadmsg" style="font-size:11px;color:#3a5a80">~3 МБ через CDN</div>
   </div>
 </div>
 
 <script>
 // ============================================================
-// КОНСТАНТЫ
+// ИСТОЧНИК ДАННЫХ — CDN, фиксированный коммит
 // ============================================================
-const GEOJSON_URL = 'data/world-50m.geojson';
+const GEOJSON_URL =
+  'https://cdn.jsdelivr.net/gh/nvkelso/natural-earth-vector@' +
+  'ca96624a56bd078437bca8184e78163e5039ad19/geojson/ne_50m_admin_0_countries.geojson';
+
+// Резервный источник (если CDN недоступен)
+const GEOJSON_FALLBACK =
+  'https://raw.githubusercontent.com/nvkelso/natural-earth-vector/' +
+  'ca96624a56bd078437bca8184e78163e5039ad19/geojson/ne_50m_admin_0_countries.geojson';
 
 const WORLD = {
-  width: 2048,      // увеличили логический размер для 50m (больше деталей)
-  height: 1024,
+  width: 2048, height: 1024,
   lonMin: -180, lonMax: 180,
   latMin: -90,  latMax: 90,
 };
 
 const state = {
-  features: [],
-  bboxes: [],
-  paths: [],              // Path2D-кэш для каждой страны
-  pathsLowDetail: [],     // Упрощённый путь для дальнего зума
+  features: [], bboxes: [], paths: [], pathsLowDetail: [],
   colors: new Map(),
   camera: { x: WORLD.width / 2, y: WORLD.height / 2, zoom: 0.5 },
-  showLabels: true,
-  showGrid: false,
-  showBorders: true,
-  selected: null,
-  hovered: null,
+  showLabels: true, showGrid: false,
+  selected: null, hovered: null,
   colorSeed: 42,
 };
 
-// ============================================================
-// ПРОЕКЦИЯ
-// ============================================================
 function project(lon, lat) {
-  const x = (lon - WORLD.lonMin) / (WORLD.lonMax - WORLD.lonMin) * WORLD.width;
-  const y = (WORLD.latMax - lat) / (WORLD.latMax - WORLD.latMin) * WORLD.height;
-  return [x, y];
+  return [
+    (lon - WORLD.lonMin) / 360 * WORLD.width,
+    (WORLD.latMax - lat) / 180 * WORLD.height,
+  ];
 }
 
-// ============================================================
-// ЗАГРУЗКА
-// ============================================================
 async function loadWorld() {
   const bar = document.getElementById('loadbar');
   const msg = document.getElementById('loadmsg');
 
-  msg.textContent = 'Скачивание файла...';
-  bar.style.width = '10%';
-
-  const res = await fetch(GEOJSON_URL);
-  if (!res.ok) throw new Error(`HTTP ${res.status} — не найден ${GEOJSON_URL}`);
-
-  msg.textContent = 'Чтение JSON...';
-  bar.style.width = '30%';
-
-  // Читаем как stream для прогресса (если поддерживается)
-  const total = parseInt(res.headers.get('content-length') || '0', 10);
-  let text = '';
-
-  if (res.body && total > 0) {
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder();
-    let received = 0;
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      received += value.length;
-      text += decoder.decode(value, { stream: true });
-      const pct = 30 + (received / total) * 40;
-      bar.style.width = pct + '%';
-      msg.textContent = `Загружено ${(received / 1024 / 1024).toFixed(1)} / ${(total / 1024 / 1024).toFixed(1)} МБ`;
+  let data = null;
+  for (const url of [GEOJSON_URL, GEOJSON_FALLBACK]) {
+    try {
+      msg.textContent = 'Скачивание...';
+      bar.style.width = '20%';
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      msg.textContent = 'Чтение...';
+      bar.style.width = '50%';
+      data = await res.json();
+      break;
+    } catch (e) {
+      console.warn('Ошибка загрузки с', url, e.message);
     }
-  } else {
-    text = await res.text();
-    bar.style.width = '70%';
   }
+  if (!data) throw new Error('Не удалось загрузить ни с CDN, ни с raw.githubusercontent');
 
-  msg.textContent = 'Парсинг...';
-  bar.style.width = '72%';
-  await nextFrame();
-
-  const data = JSON.parse(text);
   const features = data.type === 'FeatureCollection'
     ? data.features
     : [{ type: 'Feature', geometry: data, properties: {} }];
-
   state.features = features;
 
-  msg.textContent = `Построение геометрии (${features.length} стран)...`;
-  bar.style.width = '75%';
-  await nextFrame();
+  msg.textContent = `Построение (${features.length} стран)...`;
+  bar.style.width = '70%';
 
-  // ==== BBOX + Path2D — асинхронно с прогрессом ====
   const bboxes = new Array(features.length);
   const paths = new Array(features.length);
   const pathsLow = new Array(features.length);
@@ -207,129 +148,85 @@ async function loadWorld() {
   for (let i = 0; i < features.length; i++) {
     const f = features[i];
     bboxes[i] = computeBBox(f.geometry);
-    paths[i] = buildPath2D(f.geometry, 1);       // полная детализация
-    pathsLow[i] = buildPath2D(f.geometry, 3);    // прореживание (каждая 3-я точка)
-
-    if (i % 20 === 0) {
-      const pct = 75 + (i / features.length) * 22;
-      bar.style.width = pct + '%';
-      msg.textContent = `Геометрия: ${i} / ${features.length}`;
-      await nextFrame();
+    paths[i] = buildPath2D(f.geometry, 1);
+    pathsLow[i] = buildPath2D(f.geometry, 3);
+    if (i % 30 === 0) {
+      bar.style.width = (70 + i / features.length * 28) + '%';
+      await new Promise(r => requestAnimationFrame(r));
     }
   }
 
   state.bboxes = bboxes;
   state.paths = paths;
   state.pathsLowDetail = pathsLow;
-
-  msg.textContent = 'Готово';
-  bar.style.width = '100%';
-
   recolor();
 
-  setTimeout(() => {
-    document.getElementById('loading').style.display = 'none';
-  }, 250);
-}
-
-function nextFrame() {
-  return new Promise(r => requestAnimationFrame(() => r()));
+  bar.style.width = '100%';
+  msg.textContent = 'Готово';
+  setTimeout(() => document.getElementById('loading').style.display = 'none', 200);
 }
 
 function computeBBox(geom) {
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-  const type = geom.type;
-  const coords = geom.coordinates;
-
-  function visit(arr) {
-    if (typeof arr[0] === 'number') {
-      const lon = arr[0], lat = arr[1];
-      if (lon < minX) minX = lon;
-      if (lon > maxX) maxX = lon;
-      if (lat < minY) minY = lat;
-      if (lat > maxY) maxY = lat;
-    } else {
-      for (let i = 0; i < arr.length; i++) visit(arr[i]);
-    }
-  }
-
-  if (type === 'Polygon' || type === 'MultiPolygon') visit(coords);
+  (function visit(a) {
+    if (typeof a[0] === 'number') {
+      const [lon, lat] = a;
+      if (lon < minX) minX = lon; if (lon > maxX) maxX = lon;
+      if (lat < minY) minY = lat; if (lat > maxY) maxY = lat;
+    } else for (const c of a) visit(c);
+  })(geom.coordinates);
   return { minX, minY, maxX, maxY };
 }
 
-// ============================================================
-// Path2D КЭШ
-// ============================================================
 function buildPath2D(geom, step) {
   const path = new Path2D();
-  const type = geom.type;
-  const coords = geom.coordinates;
-
-  if (type === 'Polygon') {
-    for (const ring of coords) addRing(path, ring, step);
-  } else if (type === 'MultiPolygon') {
-    for (const poly of coords) {
+  if (geom.type === 'Polygon') {
+    for (const ring of geom.coordinates) addRing(path, ring, step);
+  } else if (geom.type === 'MultiPolygon') {
+    for (const poly of geom.coordinates)
       for (const ring of poly) addRing(path, ring, step);
-    }
   }
   return path;
 }
 
 function addRing(path, ring, step) {
-  const len = ring.length;
-  if (len === 0) return;
-
+  if (!ring.length) return;
   const [x0, y0] = project(ring[0][0], ring[0][1]);
   path.moveTo(x0, y0);
-
-  for (let i = step; i < len; i += step) {
+  for (let i = step; i < ring.length; i += step) {
     const [x, y] = project(ring[i][0], ring[i][1]);
     path.lineTo(x, y);
   }
-  // Закрываем последней точкой
-  const last = ring[len - 1];
-  const [xl, yl] = project(last[0], last[1]);
+  const [xl, yl] = project(ring[ring.length - 1][0], ring[ring.length - 1][1]);
   path.lineTo(xl, yl);
   path.closePath();
 }
 
-// ============================================================
-// ЦВЕТА
-// ============================================================
 function hashString(s) {
   let h = 2166136261;
-  for (let i = 0; i < s.length; i++) {
-    h ^= s.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
   return h >>> 0;
 }
 
 function recolor() {
   state.colors.clear();
   for (const f of state.features) {
-    const name = getFeatureName(f);
-    const h1 = hashString(name + state.colorSeed);
-    const h2 = hashString(name + '|a' + state.colorSeed);
-    const h3 = hashString(name + '|b' + state.colorSeed);
-    const hue = h1 % 360;
-    const sat = 30 + (h2 % 35);
-    const light = 30 + (h3 % 20);
-    state.colors.set(name, `hsl(${hue}, ${sat}%, ${light}%)`);
+    const name = getName(f);
+    const hue = hashString(name + state.colorSeed) % 360;
+    const sat = 30 + hashString(name + 's' + state.colorSeed) % 35;
+    const li = 30 + hashString(name + 'l' + state.colorSeed) % 20;
+    state.colors.set(name, `hsl(${hue}, ${sat}%, ${li}%)`);
   }
 }
 
-function getFeatureName(f) {
+const getName = f => {
   const p = f.properties || {};
-  return p.NAME || p.name || p.ADMIN || p.admin ||
-         p.SOVEREIGNT || p.sovereignt ||
-         p.ISO_A3 || p.iso_a3 || 'Unknown';
-}
-
-function getFeatureNameRu(f) {
+  return p.NAME || p.name || p.ADMIN || p.ISO_A3 || 'Unknown';
+};
+const getNameRu = f => {
   const p = f.properties || {};
-  return p.NAME_RU || p.name_ru || p.NAME_ZHT || getFeatureName(f);
-}
+  return p.NAME_RU || p.name_ru || getName(f);
+};
 
 // ============================================================
 // CANVAS
@@ -338,7 +235,6 @@ const canvas = document.getElementById('map');
 const ctx = canvas.getContext('2d', { alpha: false });
 const container = document.getElementById('map-container');
 const tooltip = document.getElementById('tooltip');
-const fpsEl = document.getElementById('fps');
 
 let W, H;
 function resize() {
@@ -353,32 +249,21 @@ function resize() {
 }
 window.addEventListener('resize', resize);
 
-// ============================================================
-// РЕНДЕР + FPS
-// ============================================================
 let renderQueued = false;
-let lastFrameTime = performance.now();
-let fpsAccum = 0, fpsCount = 0;
-
 function queueRender() {
   if (renderQueued) return;
   renderQueued = true;
-  requestAnimationFrame(() => {
-    renderQueued = false;
-    render();
-  });
+  requestAnimationFrame(() => { renderQueued = false; render(); });
 }
 
 function render() {
-  const t0 = performance.now();
-  const { camera, features, paths, pathsLowDetail, colors } = state;
+  const { camera, features, colors } = state;
 
-  // Фон
-  const oceanGrad = ctx.createLinearGradient(0, 0, 0, H);
-  oceanGrad.addColorStop(0, '#0a1a30');
-  oceanGrad.addColorStop(0.5, '#0d2540');
-  oceanGrad.addColorStop(1, '#0a1a30');
-  ctx.fillStyle = oceanGrad;
+  const g = ctx.createLinearGradient(0, 0, 0, H);
+  g.addColorStop(0, '#0a1a30');
+  g.addColorStop(0.5, '#0d2540');
+  g.addColorStop(1, '#0a1a30');
+  ctx.fillStyle = g;
   ctx.fillRect(0, 0, W, H);
 
   ctx.save();
@@ -386,76 +271,63 @@ function render() {
   ctx.scale(camera.zoom, camera.zoom);
   ctx.translate(-camera.x, -camera.y);
 
-  // Видимая область
-  const viewLeft   = camera.x - W / 2 / camera.zoom;
-  const viewRight  = camera.x + W / 2 / camera.zoom;
-  const viewTop    = camera.y - H / 2 / camera.zoom;
-  const viewBottom = camera.y + H / 2 / camera.zoom;
+  const vL = camera.x - W / 2 / camera.zoom;
+  const vR = camera.x + W / 2 / camera.zoom;
+  const vT = camera.y - H / 2 / camera.zoom;
+  const vB = camera.y + H / 2 / camera.zoom;
 
-  // ==== Выбираем детализацию по зуму ====
-  // При малом зуме рисуем упрощённые пути (быстрее в ~3 раза)
-  const useLowDetail = camera.zoom < 1.2;
-  const pathsToUse = useLowDetail ? pathsLowDetail : paths;
+  const useLow = camera.zoom < 1.2;
+  const paths = useLow ? state.pathsLowDetail : state.paths;
 
-  // ==== Проход 1: заливки ====
+  // Заливки
   for (let i = 0; i < features.length; i++) {
     const bb = state.bboxes[i];
-    const [bx1, by1] = project(bb.minX, bb.maxY);
-    const [bx2, by2] = project(bb.maxX, bb.minY);
-    if (bx2 < viewLeft || bx1 > viewRight || by2 < viewTop || by1 > viewBottom) continue;
-
-    const f = features[i];
-    const name = getFeatureName(f);
-    const path = pathsToUse[i];
-
-    ctx.fillStyle = colors.get(name) || '#3a5b3a';
-    ctx.fill(path);
+    const [x1, y1] = project(bb.minX, bb.maxY);
+    const [x2, y2] = project(bb.maxX, bb.minY);
+    if (x2 < vL || x1 > vR || y2 < vT || y1 > vB) continue;
+    ctx.fillStyle = colors.get(getName(features[i])) || '#3a5b3a';
+    ctx.fill(paths[i]);
   }
 
-  // ==== Проход 2: границы (отдельно — эффективнее) ====
-  if (state.showBorders) {
-    ctx.strokeStyle = 'rgba(0,0,0,0.55)';
-    ctx.lineWidth = Math.max(0.4, 0.8 / camera.zoom);
-    ctx.lineJoin = 'round';
-
-    for (let i = 0; i < features.length; i++) {
-      const bb = state.bboxes[i];
-      const [bx1, by1] = project(bb.minX, bb.maxY);
-      const [bx2, by2] = project(bb.maxX, bb.minY);
-      if (bx2 < viewLeft || bx1 > viewRight || by2 < viewTop || by1 > viewBottom) continue;
-
-      ctx.stroke(pathsToUse[i]);
-    }
+  // Границы
+  ctx.strokeStyle = 'rgba(0,0,0,0.55)';
+  ctx.lineWidth = Math.max(0.4, 0.8 / camera.zoom);
+  ctx.lineJoin = 'round';
+  for (let i = 0; i < features.length; i++) {
+    const bb = state.bboxes[i];
+    const [x1, y1] = project(bb.minX, bb.maxY);
+    const [x2, y2] = project(bb.maxX, bb.minY);
+    if (x2 < vL || x1 > vR || y2 < vT || y1 > vB) continue;
+    ctx.stroke(paths[i]);
   }
 
-  // ==== Проход 3: подсветка hover/selected ====
+  // Hover
   if (state.hovered) {
-    const idx = state.features.findIndex(f => getFeatureName(f) === state.hovered);
+    const idx = features.findIndex(f => getName(f) === state.hovered);
     if (idx !== -1) {
-      const path = paths[idx];
       ctx.fillStyle = colors.get(state.hovered);
       ctx.globalAlpha = 0.75;
-      ctx.fill(path);
+      ctx.fill(state.paths[idx]);
       ctx.globalAlpha = 1;
       ctx.strokeStyle = 'rgba(255,255,255,0.95)';
       ctx.lineWidth = 1.5 / camera.zoom;
-      ctx.stroke(path);
+      ctx.stroke(state.paths[idx]);
     }
   }
 
+  // Selected
   if (state.selected) {
-    const idx = state.features.findIndex(f => getFeatureName(f) === state.selected);
+    const idx = features.findIndex(f => getName(f) === state.selected);
     if (idx !== -1) {
-      const path = paths[idx];
       ctx.fillStyle = colors.get(state.selected);
-      ctx.fill(path);
+      ctx.fill(state.paths[idx]);
       ctx.strokeStyle = '#ffcc00';
       ctx.lineWidth = 2.5 / camera.zoom;
-      ctx.stroke(path);
+      ctx.stroke(state.paths[idx]);
     }
   }
 
-  // ==== Сетка ====
+  // Сетка
   if (state.showGrid) {
     ctx.strokeStyle = 'rgba(90,140,220,0.22)';
     ctx.lineWidth = 0.6 / camera.zoom;
@@ -469,79 +341,149 @@ function render() {
       ctx.moveTo(0, y); ctx.lineTo(WORLD.width, y);
     }
     ctx.stroke();
-
-    const [, eqY] = project(0, 0);
+    const [, eq] = project(0, 0);
     ctx.strokeStyle = 'rgba(255,200,80,0.55)';
-    ctx.beginPath();
-    ctx.moveTo(0, eqY); ctx.lineTo(WORLD.width, eqY);
-    ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, eq); ctx.lineTo(WORLD.width, eq); ctx.stroke();
   }
 
-  // ==== Подписи ====
+  // Названия
   if (state.showLabels && camera.zoom > 0.7) {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     for (let i = 0; i < features.length; i++) {
       const bb = state.bboxes[i];
-      const [bx1, by1] = project(bb.minX, bb.maxY);
-      const [bx2, by2] = project(bb.maxX, bb.minY);
-      if (bx2 < viewLeft || bx1 > viewRight || by2 < viewTop || by1 > viewBottom) continue;
-
-      const sizeW = (bx2 - bx1) * camera.zoom;
-      const sizeH = (by2 - by1) * camera.zoom;
-      if (sizeW < 30 || sizeH < 14) continue;
-
-      const cx = (bx1 + bx2) / 2;
-      const cy = (by1 + by2) / 2;
-
-      const name = getFeatureNameRu(features[i]);
-      const fs = Math.max(7, Math.min(14, sizeW / 9) / camera.zoom);
+      const [x1, y1] = project(bb.minX, bb.maxY);
+      const [x2, y2] = project(bb.maxX, bb.minY);
+      if (x2 < vL || x1 > vR || y2 < vT || y1 > vB) continue;
+      const sw = (x2 - x1) * camera.zoom;
+      const sh = (y2 - y1) * camera.zoom;
+      if (sw < 30 || sh < 14) continue;
+      const cx = (x1 + x2) / 2, cy = (y1 + y2) / 2;
+      const fs = Math.max(7, Math.min(14, sw / 9) / camera.zoom);
       ctx.font = `bold ${fs}px 'Courier New', monospace`;
       ctx.lineWidth = 3 / camera.zoom;
       ctx.strokeStyle = 'rgba(0,0,0,0.9)';
-      ctx.strokeText(name.toUpperCase(), cx, cy);
-      ctx.fillStyle = '#ffffff';
-      ctx.fillText(name.toUpperCase(), cx, cy);
+      const txt = getNameRu(features[i]).toUpperCase();
+      ctx.strokeText(txt, cx, cy);
+      ctx.fillStyle = '#fff';
+      ctx.fillText(txt, cx, cy);
     }
   }
 
   ctx.restore();
 
-  // ==== FPS ====
-  const t1 = performance.now();
-  const dt = t1 - lastFrameTime;
-  lastFrameTime = t1;
-  fpsAccum += dt;
-  fpsCount++;
-  if (fpsAccum > 500) {
-    const fps = Math.round(1000 / (fpsAccum / fpsCount));
-    fpsEl.textContent = `${fps} FPS | ${(t1 - t0).toFixed(1)} мс`;
-    fpsAccum = 0; fpsCount = 0;
-  }
+  document.getElementById('info').innerHTML = state.selected
+    ? `Выбрано: <b style="color:#5a9aed">${state.selected}</b>`
+    : `Стран: ${state.features.length} | ЛКМ/тач — панорама | Колесо/пинч — зум`;
+}
 
-  // Info
-  const sel = state.selected;
-  document.getElementById('info').innerHTML = sel
-    ? `Выбрано: <b style="color:#5a9aed">${sel}</b> | Стран: ${state.features.length}`
-    : `ЛКМ — панорама | Колесо — зум | Клик — выбрать | Стран: ${state.features.length}`;
+// ============================================================
+// УПРАВЛЕНИЕ (мышь + тач)
+// ============================================================
+let isDragging = false, dragMoved = false;
+let dragStart = { x: 0, y: 0 }, cameraStart = { x: 0, y: 0 };
+
+function pointerDown(cx, cy) {
+  isDragging = true; dragMoved = false;
+  dragStart = { x: cx, y: cy };
+  cameraStart = { x: state.camera.x, y: state.camera.y };
+}
+function pointerMove(cx, cy, evt) {
+  if (!isDragging) { updateHover(cx, cy, evt); return; }
+  const dx = cx - dragStart.x, dy = cy - dragStart.y;
+  if (Math.abs(dx) > 3 || Math.abs(dy) > 3) dragMoved = true;
+  state.camera.x = cameraStart.x - dx / state.camera.zoom;
+  state.camera.y = cameraStart.y - dy / state.camera.zoom;
+  clampCamera();
+  queueRender();
+}
+function pointerUp(cx, cy) {
+  if (isDragging && !dragMoved) handleClick(cx, cy);
+  isDragging = false;
+}
+
+canvas.addEventListener('mousedown', e => pointerDown(e.clientX, e.clientY));
+window.addEventListener('mousemove', e => pointerMove(e.clientX, e.clientY, e));
+window.addEventListener('mouseup', e => pointerUp(e.clientX, e.clientY));
+
+// Тач
+let touchDist = 0, touchMid = null;
+canvas.addEventListener('touchstart', e => {
+  if (e.touches.length === 1) {
+    pointerDown(e.touches[0].clientX, e.touches[0].clientY);
+  } else if (e.touches.length === 2) {
+    isDragging = false;
+    const [a, b] = e.touches;
+    touchDist = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+    touchMid = { x: (a.clientX + b.clientX) / 2, y: (a.clientY + b.clientY) / 2 };
+  }
+}, { passive: true });
+
+canvas.addEventListener('touchmove', e => {
+  e.preventDefault();
+  if (e.touches.length === 1) {
+    pointerMove(e.touches[0].clientX, e.touches[0].clientY, e);
+  } else if (e.touches.length === 2) {
+    const [a, b] = e.touches;
+    const d = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+    const mid = { x: (a.clientX + b.clientX) / 2, y: (a.clientY + b.clientY) / 2 };
+    if (touchDist > 0) {
+      const factor = d / touchDist;
+      const newZoom = Math.max(0.4, Math.min(60, state.camera.zoom * factor));
+      const rect = canvas.getBoundingClientRect();
+      const mx = mid.x - rect.left, my = mid.y - rect.top;
+      const wx = (mx - W / 2) / state.camera.zoom + state.camera.x;
+      const wy = (my - H / 2) / state.camera.zoom + state.camera.y;
+      state.camera.zoom = newZoom;
+      state.camera.x = wx - (mx - W / 2) / newZoom;
+      state.camera.y = wy - (my - H / 2) / newZoom;
+      clampCamera();
+      queueRender();
+    }
+    touchDist = d;
+  }
+}, { passive: false });
+
+canvas.addEventListener('touchend', e => {
+  if (e.touches.length === 0 && isDragging) {
+    const t = e.changedTouches[0];
+    pointerUp(t.clientX, t.clientY);
+  }
+  touchDist = 0;
+}, { passive: true });
+
+canvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  const old = state.camera.zoom;
+  const factor = e.deltaY < 0 ? 1.2 : 0.83;
+  const nz = Math.max(0.4, Math.min(60, old * factor));
+  const rect = canvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+  const wx = (mx - W / 2) / old + state.camera.x;
+  const wy = (my - H / 2) / old + state.camera.y;
+  state.camera.zoom = nz;
+  state.camera.x = wx - (mx - W / 2) / nz;
+  state.camera.y = wy - (my - H / 2) / nz;
+  clampCamera();
+  queueRender();
+}, { passive: false });
+
+function clampCamera() {
+  const hw = W / 2 / state.camera.zoom;
+  const hh = H / 2 / state.camera.zoom;
+  state.camera.x = Math.max(hw, Math.min(WORLD.width - hw, state.camera.x));
+  state.camera.y = Math.max(hh, Math.min(WORLD.height - hh, state.camera.y));
 }
 
 // ============================================================
 // HIT-TEST
 // ============================================================
-function screenToWorld(clientX, clientY) {
+function screenToLonLat(cx, cy) {
   const rect = canvas.getBoundingClientRect();
-  const mx = clientX - rect.left;
-  const my = clientY - rect.top;
-  return [
-    (mx - W / 2) / state.camera.zoom + state.camera.x,
-    (my - H / 2) / state.camera.zoom + state.camera.y,
-  ];
-}
-
-function worldToLonLat(wx, wy) {
-  const lon = wx / WORLD.width * (WORLD.lonMax - WORLD.lonMin) + WORLD.lonMin;
-  const lat = WORLD.latMax - wy / WORLD.height * (WORLD.latMax - WORLD.latMin);
+  const wx = (cx - rect.left - W / 2) / state.camera.zoom + state.camera.x;
+  const wy = (cy - rect.top - H / 2) / state.camera.zoom + state.camera.y;
+  const lon = wx / WORLD.width * 360 - 180;
+  const lat = 90 - wy / WORLD.height * 180;
   return [lon, lat];
 }
 
@@ -551,28 +493,24 @@ function pointInRing(lon, lat, ring) {
     const xi = ring[i][0], yi = ring[i][1];
     const xj = ring[j][0], yj = ring[j][1];
     if (((yi > lat) !== (yj > lat)) &&
-        (lon < (xj - xi) * (lat - yi) / (yj - yi) + xi)) {
-      inside = !inside;
-    }
+        (lon < (xj - xi) * (lat - yi) / (yj - yi) + xi)) inside = !inside;
   }
   return inside;
 }
 
-function pointInGeometry(lon, lat, geom) {
+function pointInGeom(lon, lat, geom) {
   const { type, coordinates } = geom;
   if (type === 'Polygon') {
     if (!pointInRing(lon, lat, coordinates[0])) return false;
-    for (let i = 1; i < coordinates.length; i++) {
+    for (let i = 1; i < coordinates.length; i++)
       if (pointInRing(lon, lat, coordinates[i])) return false;
-    }
     return true;
   } else if (type === 'MultiPolygon') {
     for (const poly of coordinates) {
       if (!pointInRing(lon, lat, poly[0])) continue;
       let inHole = false;
-      for (let i = 1; i < poly.length; i++) {
+      for (let i = 1; i < poly.length; i++)
         if (pointInRing(lon, lat, poly[i])) { inHole = true; break; }
-      }
       if (!inHole) return true;
     }
   }
@@ -580,142 +518,59 @@ function pointInGeometry(lon, lat, geom) {
 }
 
 function findFeatureAt(lon, lat) {
-  // Сначала сортируем кандидатов по площади bbox — маленькие страны приоритетнее
-  // (иначе анклавы вроде Лесото не находятся)
-  const candidates = [];
+  const cand = [];
   for (let i = 0; i < state.features.length; i++) {
     const bb = state.bboxes[i];
     if (lon < bb.minX || lon > bb.maxX || lat < bb.minY || lat > bb.maxY) continue;
-    const area = (bb.maxX - bb.minX) * (bb.maxY - bb.minY);
-    candidates.push({ i, area });
+    cand.push({ i, area: (bb.maxX - bb.minX) * (bb.maxY - bb.minY) });
   }
-  candidates.sort((a, b) => a.area - b.area);
-
-  for (const { i } of candidates) {
-    if (pointInGeometry(lon, lat, state.features[i].geometry)) {
-      return state.features[i];
-    }
-  }
+  cand.sort((a, b) => a.area - b.area);
+  for (const { i } of cand)
+    if (pointInGeom(lon, lat, state.features[i].geometry)) return state.features[i];
   return null;
-}
-
-// ============================================================
-// КАМЕРА
-// ============================================================
-let isDragging = false;
-let dragStart = { x: 0, y: 0 };
-let cameraStart = { x: 0, y: 0 };
-let dragMoved = false;
-
-canvas.addEventListener('mousedown', e => {
-  isDragging = true;
-  dragMoved = false;
-  dragStart = { x: e.clientX, y: e.clientY };
-  cameraStart = { x: state.camera.x, y: state.camera.y };
-});
-
-window.addEventListener('mousemove', e => {
-  if (isDragging) {
-    const dx = e.clientX - dragStart.x;
-    const dy = e.clientY - dragStart.y;
-    if (Math.abs(dx) > 3 || Math.abs(dy) > 3) dragMoved = true;
-    state.camera.x = cameraStart.x - dx / state.camera.zoom;
-    state.camera.y = cameraStart.y - dy / state.camera.zoom;
-    clampCamera();
-    queueRender();
-  } else {
-    updateHover(e);
-  }
-});
-
-window.addEventListener('mouseup', e => {
-  if (isDragging && !dragMoved) handleClick(e);
-  isDragging = false;
-});
-
-canvas.addEventListener('wheel', e => {
-  e.preventDefault();
-  const oldZoom = state.camera.zoom;
-  const factor = e.deltaY < 0 ? 1.2 : 0.83;
-  const newZoom = Math.max(0.4, Math.min(60, oldZoom * factor));
-
-  const rect = canvas.getBoundingClientRect();
-  const mx = e.clientX - rect.left;
-  const my = e.clientY - rect.top;
-  const wx = (mx - W / 2) / oldZoom + state.camera.x;
-  const wy = (my - H / 2) / oldZoom + state.camera.y;
-
-  state.camera.zoom = newZoom;
-  state.camera.x = wx - (mx - W / 2) / newZoom;
-  state.camera.y = wy - (my - H / 2) / newZoom;
-  clampCamera();
-  queueRender();
-}, { passive: false });
-
-function clampCamera() {
-  const halfW = W / 2 / state.camera.zoom;
-  const halfH = H / 2 / state.camera.zoom;
-  state.camera.x = Math.max(halfW, Math.min(WORLD.width - halfW, state.camera.x));
-  state.camera.y = Math.max(halfH, Math.min(WORLD.height - halfH, state.camera.y));
 }
 
 // ============================================================
 // HOVER / CLICK
 // ============================================================
-let hoverTimeout = null;
-function updateHover(e) {
-  if (hoverTimeout) return;
-  hoverTimeout = setTimeout(() => hoverTimeout = null, 50);
+let hoverTimer = null;
+function updateHover(cx, cy, e) {
+  if (hoverTimer) return;
+  hoverTimer = setTimeout(() => hoverTimer = null, 50);
 
-  const [wx, wy] = screenToWorld(e.clientX, e.clientY);
-  const [lon, lat] = worldToLonLat(wx, wy);
-  const feature = findFeatureAt(lon, lat);
-  const newHover = feature ? getFeatureName(feature) : null;
+  const [lon, lat] = screenToLonLat(cx, cy);
+  const f = findFeatureAt(lon, lat);
+  const n = f ? getName(f) : null;
 
-  if (newHover !== state.hovered) {
-    state.hovered = newHover;
-    queueRender();
-  }
+  if (n !== state.hovered) { state.hovered = n; queueRender(); }
 
   const rect = container.getBoundingClientRect();
-  if (feature) {
-    const p = feature.properties || {};
-    const nameRu = getFeatureNameRu(feature);
-    const nameEn = getFeatureName(feature);
-    const iso = p.ISO_A3 || p.iso_a3 || '—';
-    const continent = p.CONTINENT || p.continent || '—';
-    const pop = p.POP_EST || p.pop_est;
-    const subregion = p.SUBREGION || p.subregion || '';
-
+  if (f) {
+    const p = f.properties || {};
     tooltip.style.display = 'block';
-    let left = e.clientX - rect.left + 15;
-    let top  = e.clientY - rect.top  + 15;
-    if (left > W - 290) left = e.clientX - rect.left - 290;
-    if (top  > H - 150) top  = e.clientY - rect.top  - 160;
-
+    let left = cx - rect.left + 15, top = cy - rect.top + 15;
+    if (left > W - 260) left = cx - rect.left - 260;
+    if (top > H - 130) top = cy - rect.top - 140;
     tooltip.style.left = left + 'px';
-    tooltip.style.top  = top + 'px';
-    tooltip.innerHTML = `
-      <b>${nameRu}</b><br>
-      <span style="color:#6a7a90">${nameEn}</span><br>
-      ISO: ${iso}<br>
-      ${subregion ? `Регион: ${subregion}<br>` : ''}
-      Континент: ${continent}
-      ${pop ? `<br>Население: ~${(pop / 1e6).toFixed(1)} млн` : ''}
-    `;
+    tooltip.style.top = top + 'px';
+    const pop = p.POP_EST || p.pop_est;
+    tooltip.innerHTML =
+      `<b>${getNameRu(f)}</b><br>
+       <span style="color:#6a7a90">${getName(f)}</span><br>
+       ISO: ${p.ISO_A3 || '—'}<br>
+       ${p.CONTINENT ? `Континент: ${p.CONTINENT}<br>` : ''}
+       ${pop ? `Население: ~${(pop/1e6).toFixed(1)} млн` : ''}`;
   } else {
     tooltip.style.display = 'none';
   }
 }
 
-function handleClick(e) {
-  const [wx, wy] = screenToWorld(e.clientX, e.clientY);
-  const [lon, lat] = worldToLonLat(wx, wy);
-  const feature = findFeatureAt(lon, lat);
-
-  if (feature) {
-    const name = getFeatureName(feature);
-    state.selected = (state.selected === name) ? null : name;
+function handleClick(cx, cy) {
+  const [lon, lat] = screenToLonLat(cx, cy);
+  const f = findFeatureAt(lon, lat);
+  if (f) {
+    const n = getName(f);
+    state.selected = state.selected === n ? null : n;
   } else {
     state.selected = null;
   }
@@ -725,39 +580,33 @@ function handleClick(e) {
 // ============================================================
 // UI
 // ============================================================
-document.getElementById('btnRegenerate').addEventListener('click', () => {
+document.getElementById('btnRegenerate').onclick = () => {
   state.colorSeed = Math.floor(Math.random() * 1e9);
-  recolor();
-  queueRender();
-});
-document.getElementById('btnLabels').addEventListener('click', e => {
+  recolor(); queueRender();
+};
+document.getElementById('btnLabels').onclick = e => {
   state.showLabels = !state.showLabels;
   e.target.classList.toggle('active', state.showLabels);
   queueRender();
-});
-document.getElementById('btnGrid').addEventListener('click', e => {
+};
+document.getElementById('btnGrid').onclick = e => {
   state.showGrid = !state.showGrid;
   e.target.classList.toggle('active', state.showGrid);
   queueRender();
-});
-document.getElementById('btnBorders').addEventListener('click', e => {
-  state.showBorders = !state.showBorders;
-  e.target.classList.toggle('active', state.showBorders);
-  queueRender();
-});
-document.getElementById('btnReset').addEventListener('click', () => {
-  state.camera = { x: WORLD.width / 2, y: WORLD.height / 2, zoom: 0.5 };
-  state.selected = null;
-  state.hovered = null;
-  queueRender();
-});
+};
+document.getElementById('btnReset').onclick = () => {
+  state.camera.zoom = Math.min(W / WORLD.width, H / WORLD.height) * 0.95;
+  state.camera.x = WORLD.width / 2;
+  state.camera.y = WORLD.height / 2;
+  state.selected = null; state.hovered = null;
+  clampCamera(); queueRender();
+};
 
 // ============================================================
-// ЗАПУСК
+// СТАРТ
 // ============================================================
 resize();
 loadWorld().then(() => {
-  // Начальный вид — весь мир
   state.camera.zoom = Math.min(W / WORLD.width, H / WORLD.height) * 0.95;
   state.camera.x = WORLD.width / 2;
   state.camera.y = WORLD.height / 2;
@@ -765,12 +614,11 @@ loadWorld().then(() => {
   render();
 }).catch(err => {
   document.getElementById('loading').innerHTML =
-    `<div style="color:#e74c3c;text-align:center;padding:20px;max-width:400px">
-       ❌ Ошибка: ${err.message}<br><br>
+    `<div style="color:#e74c3c;text-align:center;padding:20px;max-width:340px">
+       ❌ ${err.message}<br><br>
        <span style="font-size:11px;color:#7a8aa0">
-         1. Файл <b>${GEOJSON_URL}</b> существует?<br>
-         2. Открываешь через http:// (не file://)?<br>
-         3. Размер файла ~5 МБ (это 50m, не 110m)?
+         Проверь интернет-соединение.<br>
+         Если CDN не работает — попробуй открыть позже.
        </span>
      </div>`;
   console.error(err);
