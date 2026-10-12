@@ -1,50 +1,757 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Мировая карта — Варгейм</title>
-  <link rel="stylesheet" href="style.css" />
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<meta charset="UTF-8">
+<title>Global Map - Wargame</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #0a0e1a;
+    color: #c9d1d9;
+    font-family: 'Courier New', monospace;
+    overflow: hidden;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+  #ui {
+    padding: 10px 20px;
+    background: #131a2a;
+    border-bottom: 1px solid #2a3550;
+    display: flex;
+    gap: 20px;
+    align-items: center;
+    font-size: 13px;
+    z-index: 10;
+  }
+  #ui button {
+    background: #1e2a44;
+    color: #c9d1d9;
+    border: 1px solid #3a4a70;
+    padding: 6px 14px;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 12px;
+    border-radius: 3px;
+    transition: all 0.15s;
+  }
+  #ui button:hover { background: #2a3a5c; border-color: #5a7ab0; }
+  #ui button.active { background: #3a5a9c; border-color: #6a9adc; color: #fff; }
+  #info { margin-left: auto; color: #7a8aa0; }
+  #map-container {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+  }
+  canvas { display: block; cursor: grab; }
+  canvas:active { cursor: grabbing; }
+  #tooltip {
+    position: absolute;
+    background: rgba(10, 14, 26, 0.95);
+    border: 1px solid #3a4a70;
+    padding: 8px 12px;
+    font-size: 12px;
+    pointer-events: none;
+    border-radius: 3px;
+    display: none;
+    z-index: 20;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+  }
+  #tooltip b { color: #6a9adc; }
+</style>
 </head>
 <body>
-  <div id="app">
-    <header id="hud">
-      <div class="hud-block">
-        <span class="label">Ход:</span>
-        <span id="turn">1</span>
-      </div>
-      <div class="hud-block">
-        <span class="label">Игрок:</span>
-        <span id="player">Игрок 1</span>
-      </div>
-      <div class="hud-block">
-        <span class="label">Ресурсы:</span>
-        <span id="resources">1000</span>
-      </div>
-      <div class="hud-block">
-        <span class="label">Выбранный регион:</span>
-        <span id="selected-region">—</span>
-      </div>
-    </header>
 
-    <div id="map"></div>
+<div id="ui">
+  <button id="btnRegenerate">🔄 Новый мир</button>
+  <button id="btnLabels" class="active">🏷 Названия</button>
+  <button id="btnGrid">📐 Сетка</button>
+  <span id="info">ЛКМ — перетащить | Колесо — зум | Клик по стране — выбрать</span>
+</div>
 
-    <aside id="panel">
-      <h2 id="region-name">Выберите регион</h2>
-      <div id="region-info">
-        <p><b>Владелец:</b> <span id="region-owner">—</span></p>
-        <p><b>Ресурсы:</b> <span id="region-resources">—</span></p>
-        <p><b>Гарнизон:</b> <span id="region-units">—</span></p>
-      </div>
-      <div class="actions">
-        <button id="btn-move">Переместить войска</button>
-        <button id="btn-end-turn">Завершить ход</button>
-      </div>
-    </aside>
-  </div>
+<div id="map-container">
+  <canvas id="map"></canvas>
+  <div id="tooltip"></div>
+</div>
 
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="script.js"></script>
+<script>
+// ============================================================
+// ПРОЦЕДУРНАЯ ГЕНЕРАЦИЯ КАРТЫ МИРА
+// ============================================================
+
+const canvas = document.getElementById('map');
+const ctx = canvas.getContext('2d');
+const tooltip = document.getElementById('tooltip');
+const container = document.getElementById('map-container');
+
+let W, H;
+function resize() {
+  W = container.clientWidth;
+  H = container.clientHeight;
+  canvas.width = W * devicePixelRatio;
+  canvas.height = H * devicePixelRatio;
+  canvas.style.width = W + 'px';
+  canvas.style.height = H + 'px';
+  ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+  render();
+}
+window.addEventListener('resize', resize);
+
+// ------------------------------------------------------------
+// Генератор шума (value noise + fbm) — детерминированный
+// ------------------------------------------------------------
+function mulberry32(seed) {
+  return function() {
+    seed |= 0; seed = seed + 0x6D2B79F5 | 0;
+    let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+
+class Noise {
+  constructor(seed) {
+    this.rand = mulberry32(seed);
+    this.perm = new Uint8Array(512);
+    const p = new Uint8Array(256);
+    for (let i = 0; i < 256; i++) p[i] = i;
+    for (let i = 255; i > 0; i--) {
+      const j = Math.floor(this.rand() * (i + 1));
+      [p[i], p[j]] = [p[j], p[i]];
+    }
+    for (let i = 0; i < 512; i++) this.perm[i] = p[i & 255];
+  }
+
+  fade(t) { return t * t * t * (t * (t * 6 - 15) + 10); }
+  lerp(a, b, t) { return a + t * (b - a); }
+
+  grad(hash, x, y) {
+    const h = hash & 7;
+    const u = h < 4 ? x : y;
+    const v = h < 4 ? y : x;
+    return ((h & 1) ? -u : u) + ((h & 2) ? -2 * v : 2 * v);
+  }
+
+  noise2D(x, y) {
+    const X = Math.floor(x) & 255;
+    const Y = Math.floor(y) & 255;
+    x -= Math.floor(x); y -= Math.floor(y);
+    const u = this.fade(x), v = this.fade(y);
+    const p = this.perm;
+    const A = p[X] + Y, B = p[X + 1] + Y;
+    return this.lerp(
+      this.lerp(this.grad(p[A], x, y), this.grad(p[B], x - 1, y), u),
+      this.lerp(this.grad(p[A + 1], x, y - 1), this.grad(p[B + 1], x - 1, y - 1), u),
+      v
+    );
+  }
+
+  fbm(x, y, octaves = 5, lacunarity = 2, gain = 0.5) {
+    let sum = 0, amp = 1, freq = 1, norm = 0;
+    for (let i = 0; i < octaves; i++) {
+      sum += amp * this.noise2D(x * freq, y * freq);
+      norm += amp;
+      amp *= gain;
+      freq *= lacunarity;
+    }
+    return sum / norm;
+  }
+}
+
+// ------------------------------------------------------------
+// Состояние мира
+// ------------------------------------------------------------
+const MAP_W = 1024; // логическая ширина карты
+const MAP_H = 512;  // логическая высота (2:1 как эквипрямоугольная проекция)
+
+const state = {
+  seed: 12345,
+  heightMap: null,
+  cellTypes: null,      // 0=океан, 1=суша, 2=побережье, 3=горы
+  cells: null,          // регионы/ячейки
+  countryMap: null,     // индекс страны для каждой ячейки
+  countries: [],
+  showLabels: true,
+  showGrid: false,
+  selected: null,
+  camera: { x: 0, y: 0, zoom: 1 },
+  hoveredCountry: -1,
+};
+
+// ------------------------------------------------------------
+// Генерация мира
+// ------------------------------------------------------------
+function generateWorld(seed) {
+  state.seed = seed;
+  const noise = new Noise(seed);
+  const noise2 = new Noise(seed + 777);
+
+  const cols = 128;
+  const rows = 64;
+  const cellW = MAP_W / cols;
+  const cellH = MAP_H / rows;
+
+  const heightMap = new Float32Array(cols * rows);
+  const cellTypes = new Uint8Array(cols * rows);
+
+  // 1. Генерация высот
+  for (let y = 0; y < rows; y++) {
+    for (let x = 0; x < cols; x++) {
+      const nx = x / cols;
+      const ny = y / rows;
+
+      // Широта: у полюсов холоднее / меньше суши
+      const latFactor = 1 - Math.abs(ny - 0.5) * 2; // 0 у полюсов, 1 у экватора
+      const latShape = Math.pow(latFactor, 0.4);
+
+      let h = noise.fbm(nx * 4, ny * 4, 6, 2, 0.5);
+      h = (h + 1) * 0.5; // [0,1]
+
+      // Континентальность: увеличиваем контраст
+      h = Math.pow(h, 1.3);
+
+      // Смещение от полюсов
+      h *= 0.5 + latShape * 0.6;
+
+      // Добавляем крупные континенты (низкочастотный шум)
+      const continent = (noise2.fbm(nx * 2 + 100, ny * 2 + 100, 3) + 1) * 0.5;
+      h = h * 0.6 + continent * 0.55;
+
+      heightMap[y * cols + x] = h;
+
+      // Классификация
+      if (h < 0.48) cellTypes[y * cols + x] = 0;       // океан
+      else if (h < 0.53) cellTypes[y * cols + x] = 2;  // побережье
+      else if (h < 0.75) cellTypes[y * cols + x] = 1;  // суша
+      else cellTypes[y * cols + x] = 3;                // горы
+    }
+  }
+
+  state.heightMap = heightMap;
+  state.cellTypes = cellTypes;
+  state.cols = cols;
+  state.rows = rows;
+
+  // 2. Разбиение суши на страны (flood fill по регионам)
+  assignCountries(cols, rows, cellTypes, noise);
+}
+
+// ------------------------------------------------------------
+// Разбиение на страны через seed-точки + BFS
+// ------------------------------------------------------------
+function assignCountries(cols, rows, cellTypes, noise) {
+  const total = cols * rows;
+  const countryMap = new Int16Array(total).fill(-1);
+
+  // Находим seed-точки (по одной на крупный регион)
+  const landCells = [];
+  for (let i = 0; i < total; i++) {
+    if (cellTypes[i] !== 0) landCells.push(i);
+  }
+
+  // K-means-подобный подход: раскидываем N сидов, потом BFS
+  const NUM_COUNTRIES = 14;
+  const seeds = [];
+
+  // Равномерно распределяем сиды по суше
+  const step = Math.max(1, Math.floor(landCells.length / NUM_COUNTRIES));
+  for (let i = 0; i < NUM_COUNTRIES; i++) {
+    const idx = landCells[Math.min(landCells.length - 1, i * step + Math.floor(noise.rand() * step))];
+    seeds.push(idx);
+  }
+
+  // BFS от каждого сида
+  const queue = [];
+  const visited = new Uint8Array(total);
+
+  for (let c = 0; c < seeds.length; c++) {
+    queue.length = 0;
+    queue.push(seeds[c]);
+    visited[seeds[c]] = 1;
+    countryMap[seeds[c]] = c;
+
+    let head = 0;
+    let cellCount = 0;
+    const maxCells = Math.floor(landCells.length / NUM_COUNTRIES * 1.6);
+
+    while (head < queue.length && cellCount < maxCells) {
+      const cur = queue[head++];
+      cellCount++;
+      const cx = cur % cols;
+      const cy = Math.floor(cur / cols);
+
+      // 4 соседа
+      const neighbors = [
+        [cx - 1, cy], [cx + 1, cy],
+        [cx, cy - 1], [cx, cy + 1]
+      ];
+
+      for (const [nx, ny] of neighbors) {
+        if (nx < 0 || nx >= cols || ny < 0 || ny >= rows) continue;
+        const nidx = ny * cols + nx;
+        if (visited[nidx]) continue;
+        if (cellTypes[nidx] === 0) continue; // океан
+        visited[nidx] = 1;
+        countryMap[nidx] = c;
+        queue.push(nidx);
+      }
+    }
+  }
+
+  // Остатки суши отдаём ближайшей стране
+  for (let i = 0; i < total; i++) {
+    if (cellTypes[i] !== 0 && countryMap[i] === -1) {
+      const x = i % cols;
+      const y = Math.floor(i / cols);
+      let best = -1, bestDist = Infinity;
+      for (let dy = -3; dy <= 3; dy++) {
+        for (let dx = -3; dx <= 3; dx++) {
+          const nx = x + dx, ny = y + dy;
+          if (nx < 0 || nx >= cols || ny < 0 || ny >= rows) continue;
+          const nidx = ny * cols + nx;
+          if (countryMap[nidx] !== -1) {
+            const d = dx * dx + dy * dy;
+            if (d < bestDist) { bestDist = d; best = countryMap[nidx]; }
+          }
+        }
+      }
+      if (best !== -1) countryMap[i] = best;
+    }
+  }
+
+  // Создаём метаданные стран
+  const names = generateNames(NUM_COUNTRIES, noise);
+  const colors = generateColors(NUM_COUNTRIES);
+  const countries = [];
+  const stats = {};
+  for (let i = 0; i < NUM_COUNTRIES; i++) {
+    stats[i] = { cells: 0, sumX: 0, sumY: 0, ports: 0, mountains: 0 };
+  }
+
+  for (let i = 0; i < total; i++) {
+    const c = countryMap[i];
+    if (c === -1) continue;
+    const x = i % cols;
+    const y = Math.floor(i / cols);
+    stats[c].cells++;
+    stats[c].sumX += x;
+    stats[c].sumY += y;
+    if (cellTypes[i] === 3) stats[c].mountains++;
+    // Порт = суша рядом с океаном
+    if (isCoastal(i, cols, rows, cellTypes)) stats[c].ports++;
+  }
+
+  for (let i = 0; i < NUM_COUNTRIES; i++) {
+    const s = stats[i];
+    countries.push({
+      id: i,
+      name: names[i],
+      color: colors[i],
+      cells: s.cells,
+      mountains: s.mountains,
+      ports: s.ports,
+      // Центр (в координатах ячеек)
+      cx: s.cells > 0 ? s.sumX / s.cells : 0,
+      cy: s.cells > 0 ? s.sumY / s.cells : 0,
+      capital: null,
+      capitalName: null,
+      army: 5 + Math.floor(noise.rand() * 20),
+      money: 100 + Math.floor(noise.rand() * 900),
+      population: 0,
+    });
+  }
+
+  // Выбираем столицы (центр страны)
+  for (const c of countries) {
+    if (c.cells === 0) continue;
+    let best = -1, bestDist = Infinity;
+    for (let i = 0; i < total; i++) {
+      if (countryMap[i] !== c.id) continue;
+      const x = i % cols;
+      const y = Math.floor(i / cols);
+      const d = (x - c.cx) ** 2 + (y - c.cy) ** 2;
+      if (d < bestDist) { bestDist = d; best = i; }
+    }
+    if (best !== -1) {
+      c.capital = best;
+      c.capitalName = c.name + '-Город';
+      c.population = Math.floor(c.cells * (8 + noise.rand() * 12));
+    }
+  }
+
+  state.countryMap = countryMap;
+  state.countries = countries;
+  state.selected = null;
+  state.hoveredCountry = -1;
+}
+
+function isCoastal(idx, cols, rows, cellTypes) {
+  const x = idx % cols, y = Math.floor(idx / cols);
+  const dirs = [[1,0],[-1,0],[0,1],[0,-1]];
+  for (const [dx, dy] of dirs) {
+    const nx = x + dx, ny = y + dy;
+    if (nx < 0 || nx >= cols || ny < 0 || ny >= rows) continue;
+    if (cellTypes[ny * cols + nx] === 0) return true;
+  }
+  return false;
+}
+
+// ------------------------------------------------------------
+// Имена и цвета
+// ------------------------------------------------------------
+const NAME_PARTS_A = ['Аль','Вал','Драк','Эль','Фор','Грон','Хел','Ир','Кал','Лор',
+  'Мор','Нор','Ос','Пел','Рун','Сав','Тор','Ур','Фен','Цир',
+  'Бра','Кра','Шад','Яр','Вел','Гор','Дун','Зар','Инг','Кром'];
+const NAME_PARTS_B = ['тания','мар','дор','ленд','рия','гард','штейн','бург','ланд',
+  'ния','вия','кия','холм','фьорд','мир','стан','дол','рика','вин','фор'];
+const COLORS = [
+  '#e74c3c', '#3498db', '#2ecc71', '#f39c12', '#9b59b6',
+  '#1abc9c', '#e67e22', '#34495e', '#16a085', '#c0392b',
+  '#8e44ad', '#27ae60', '#d35400', '#2980b9', '#f1c40f',
+  '#e91e63', '#00bcd4', '#ff5722', '#795548', '#607d8b'
+];
+
+function generateNames(n, noise) {
+  const used = new Set();
+  const names = [];
+  while (names.length < n) {
+    const a = NAME_PARTS_A[Math.floor(noise.rand() * NAME_PARTS_A.length)];
+    const b = NAME_PARTS_B[Math.floor(noise.rand() * NAME_PARTS_B.length)];
+    const name = a + b;
+    if (used.has(name)) continue;
+    used.add(name);
+    names.push(name);
+  }
+  return names;
+}
+
+function generateColors(n) {
+  return COLORS.slice(0, n);
+}
+
+// ------------------------------------------------------------
+// РЕНДЕР
+// ------------------------------------------------------------
+function render() {
+  const { camera, cols, rows, cellTypes, countryMap, countries } = state;
+  if (!cellTypes) return;
+
+  // Фон — океан
+  ctx.fillStyle = '#0d1a2e';
+  ctx.fillRect(0, 0, W, H);
+
+  ctx.save();
+  ctx.translate(W / 2, H / 2);
+  ctx.scale(camera.zoom, camera.zoom);
+  ctx.translate(-camera.x, -camera.y);
+
+  const cellW = MAP_W / cols;
+  const cellH = MAP_H / rows;
+
+  // 1. Рисуем ячейки суши и океана
+  for (let y = 0; y < rows; y++) {
+    for (let x = 0; x < cols; x++) {
+      const idx = y * cols + x;
+      const t = cellTypes[idx];
+      const px = x * cellW;
+      const py = y * cellH;
+
+      if (t === 0) {
+        // Океан с градиентом глубины
+        const h = state.heightMap[idx];
+        const depth = Math.max(0, 0.48 - h) / 0.48;
+        const b = Math.floor(20 + (1 - depth) * 30);
+        const g = Math.floor(30 + (1 - depth) * 40);
+        const r = Math.floor(10 + (1 - depth) * 15);
+        ctx.fillStyle = `rgb(${r},${g},${b + 20})`;
+      } else {
+        const c = countryMap[idx];
+        const country = countries[c];
+        if (!country) continue;
+        const base = country.color;
+        let shade = 1;
+        if (t === 3) shade = 1.25;       // горы светлее
+        else if (t === 2) shade = 0.85;  // побережье темнее
+        // Небольшая вариация по высоте
+        const h = state.heightMap[idx];
+        shade *= 0.85 + (h - 0.5) * 0.5;
+        ctx.fillStyle = shadeColor(base, shade);
+      }
+      ctx.fillRect(px, py, cellW + 0.5, cellH + 0.5);
+    }
+  }
+
+  // 2. Границы стран (обводка ячеек)
+  ctx.lineWidth = Math.max(0.5, 1 / camera.zoom);
+  ctx.strokeStyle = 'rgba(0,0,0,0.55)';
+  ctx.beginPath();
+  for (let y = 0; y < rows; y++) {
+    for (let x = 0; x < cols; x++) {
+      const idx = y * cols + x;
+      if (cellTypes[idx] === 0) continue;
+      const c = countryMap[idx];
+      if (c === -1) continue;
+      const px = x * cellW;
+      const py = y * cellH;
+
+      // правый сосед
+      if (x + 1 < cols) {
+        const r = countryMap[idx + 1];
+        if (r !== c || cellTypes[idx + 1] === 0) {
+          ctx.moveTo(px + cellW, py);
+          ctx.lineTo(px + cellW, py + cellH);
+        }
+      }
+      // нижний сосед
+      if (y + 1 < rows) {
+        const b = countryMap[idx + cols];
+        if (b !== c || cellTypes[idx + cols] === 0) {
+          ctx.moveTo(px, py + cellH);
+          ctx.lineTo(px + cellW, py + cellH);
+        }
+      }
+      // левый / верхний для внешних границ карты
+      if (x === 0) { ctx.moveTo(px, py); ctx.lineTo(px, py + cellH); }
+      if (y === 0) { ctx.moveTo(px, py); ctx.lineTo(px + cellW, py); }
+    }
+  }
+  ctx.stroke();
+
+  // 3. Выделение страны под курсором/выбранной
+  if (state.selected !== null) drawCountryOutline(state.selected, cellW, cellH, '#ffcc00', 2.5);
+  if (state.hoveredCountry !== -1 && state.hoveredCountry !== state.selected) {
+    drawCountryOutline(state.hoveredCountry, cellW, cellH, 'rgba(255,255,255,0.8)', 1.5);
+  }
+
+  // 4. Столицы
+  for (const c of countries) {
+    if (c.capital === null) continue;
+    const x = (c.capital % cols) * cellW + cellW / 2;
+    const y = Math.floor(c.capital / cols) * cellH + cellH / 2;
+    const r = Math.max(2, 4 / camera.zoom);
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fillStyle = '#fff';
+    ctx.fill();
+    ctx.strokeStyle = '#000';
+    ctx.lineWidth = Math.max(0.5, 1 / camera.zoom);
+    ctx.stroke();
+  }
+
+  // 5. Сетка
+  if (state.showGrid) {
+    ctx.strokeStyle = 'rgba(120,160,220,0.15)';
+    ctx.lineWidth = 0.5 / camera.zoom;
+    ctx.beginPath();
+    for (let x = 0; x <= cols; x += 8) {
+      ctx.moveTo(x * cellW, 0); ctx.lineTo(x * cellW, MAP_H);
+    }
+    for (let y = 0; y <= rows; y += 8) {
+      ctx.moveTo(0, y * cellH); ctx.lineTo(MAP_W, y * cellH);
+    }
+    ctx.stroke();
+  }
+
+  // 6. Названия стран
+  if (state.showLabels && camera.zoom > 0.5) {
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    for (const c of countries) {
+      if (c.cells === 0) continue;
+      const x = c.cx * cellW + cellW / 2;
+      const y = c.cy * cellH + cellH / 2;
+      const fs = Math.max(8, 13 / camera.zoom);
+      ctx.font = `bold ${fs}px 'Courier New', monospace`;
+      ctx.lineWidth = 3 / camera.zoom;
+      ctx.strokeStyle = 'rgba(0,0,0,0.85)';
+      ctx.strokeText(c.name.toUpperCase(), x, y);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillText(c.name.toUpperCase(), x, y);
+    }
+  }
+
+  ctx.restore();
+
+  // Информация в UI
+  const sel = state.selected !== null ? state.countries[state.selected] : null;
+  document.getElementById('info').innerHTML = sel
+    ? `<b style="color:${sel.color}">${sel.name}</b> | Нас.: ${sel.population.toLocaleString()} | 💰 ${sel.money} | ⚔ ${sel.army}`
+    : 'ЛКМ — перетащить | Колесо — зум | Клик по стране — выбрать';
+}
+
+function drawCountryOutline(countryId, cellW, cellH, color, lw) {
+  const { cols, rows, cellTypes, countryMap } = state;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = lw / state.camera.zoom;
+  ctx.beginPath();
+  for (let y = 0; y < rows; y++) {
+    for (let x = 0; x < cols; x++) {
+      const idx = y * cols + x;
+      if (countryMap[idx] !== countryId || cellTypes[idx] === 0) continue;
+      const px = x * cellW, py = y * cellH;
+      if (x + 1 < cols && countryMap[idx + 1] !== countryId) {
+        ctx.moveTo(px + cellW, py); ctx.lineTo(px + cellW, py + cellH);
+      }
+      if (x - 1 >= 0 && countryMap[idx - 1] !== countryId) {
+        ctx.moveTo(px, py); ctx.lineTo(px, py + cellH);
+      }
+      if (y + 1 < rows && countryMap[idx + cols] !== countryId) {
+        ctx.moveTo(px, py + cellH); ctx.lineTo(px + cellW, py + cellH);
+      }
+      if (y - 1 >= 0 && countryMap[idx - cols] !== countryId) {
+        ctx.moveTo(px, py); ctx.lineTo(px + cellW, py);
+      }
+    }
+  }
+  ctx.stroke();
+}
+
+function shadeColor(hex, factor) {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  const clamp = v => Math.max(0, Math.min(255, Math.round(v * factor)));
+  return `rgb(${clamp(r)},${clamp(g)},${clamp(b)})`;
+}
+
+// ------------------------------------------------------------
+// Управление камерой
+// ------------------------------------------------------------
+let isDragging = false;
+let dragStart = { x: 0, y: 0 };
+let cameraStart = { x: 0, y: 0 };
+let dragMoved = false;
+
+canvas.addEventListener('mousedown', (e) => {
+  isDragging = true;
+  dragMoved = false;
+  dragStart = { x: e.clientX, y: e.clientY };
+  cameraStart = { x: state.camera.x, y: state.camera.y };
+});
+
+window.addEventListener('mousemove', (e) => {
+  if (isDragging) {
+    const dx = e.clientX - dragStart.x;
+    const dy = e.clientY - dragStart.y;
+    if (Math.abs(dx) > 3 || Math.abs(dy) > 3) dragMoved = true;
+    state.camera.x = cameraStart.x - dx / state.camera.zoom;
+    state.camera.y = cameraStart.y - dy / state.camera.zoom;
+    clampCamera();
+    render();
+  } else {
+    updateHover(e);
+  }
+});
+
+window.addEventListener('mouseup', (e) => {
+  if (isDragging && !dragMoved) handleClick(e);
+  isDragging = false;
+});
+
+canvas.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  const oldZoom = state.camera.zoom;
+  const factor = e.deltaY < 0 ? 1.15 : 0.87;
+  const newZoom = Math.max(0.3, Math.min(8, oldZoom * factor));
+  // Зум к курсору
+  const rect = canvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left;
+  const my = e.clientY - rect.top;
+  const wx = (mx - W / 2) / oldZoom + state.camera.x;
+  const wy = (my - H / 2) / oldZoom + state.camera.y;
+  state.camera.zoom = newZoom;
+  state.camera.x = wx - (mx - W / 2) / newZoom;
+  state.camera.y = wy - (my - H / 2) / newZoom;
+  clampCamera();
+  render();
+}, { passive: false });
+
+function clampCamera() {
+  const halfW = W / 2 / state.camera.zoom;
+  const halfH = H / 2 / state.camera.zoom;
+  state.camera.x = Math.max(halfW - 100, Math.min(MAP_W - halfW + 100, state.camera.x));
+  state.camera.y = Math.max(halfH - 100, Math.min(MAP_H - halfH + 100, state.camera.y));
+}
+
+// ------------------------------------------------------------
+// Клик и hover по карте
+// ------------------------------------------------------------
+function screenToCell(clientX, clientY) {
+  const rect = canvas.getBoundingClientRect();
+  const mx = clientX - rect.left;
+  const my = clientY - rect.top;
+  const worldX = (mx - W / 2) / state.camera.zoom + state.camera.x;
+  const worldY = (my - H / 2) / state.camera.zoom + state.camera.y;
+  const cellW = MAP_W / state.cols;
+  const cellH = MAP_H / state.rows;
+  const cx = Math.floor(worldX / cellW);
+  const cy = Math.floor(worldY / cellH);
+  if (cx < 0 || cx >= state.cols || cy < 0 || cy >= state.rows) return -1;
+  return cy * state.cols + cx;
+}
+
+function updateHover(e) {
+  const idx = screenToCell(e.clientX, e.clientY);
+  const newHover = (idx !== -1 && state.cellTypes[idx] !== 0 && state.countryMap[idx] !== -1)
+    ? state.countryMap[idx] : -1;
+
+  if (newHover !== state.hoveredCountry) {
+    state.hoveredCountry = newHover;
+    render();
+  }
+
+  if (newHover !== -1) {
+    const c = state.countries[newHover];
+    tooltip.style.display = 'block';
+    tooltip.style.left = (e.clientX - container.getBoundingClientRect().left + 15) + 'px';
+    tooltip.style.top = (e.clientY - container.getBoundingClientRect().top + 15) + 'px';
+    tooltip.innerHTML = `<b>${c.name}</b><br>
+      Нас.: ${c.population.toLocaleString()}<br>
+      ⚔ Армия: ${c.army} | 💰 ${c.money}<br>
+      🏔 Горы: ${c.mountains} | ⚓ Порты: ${c.ports}`;
+  } else {
+    tooltip.style.display = 'none';
+  }
+}
+
+function handleClick(e) {
+  const idx = screenToCell(e.clientX, e.clientY);
+  if (idx === -1) { state.selected = null; render(); return; }
+  if (state.cellTypes[idx] === 0) { state.selected = null; render(); return; }
+  const c = state.countryMap[idx];
+  if (c === -1) { state.selected = null; render(); return; }
+  state.selected = (state.selected === c) ? null : c;
+  render();
+}
+
+// ------------------------------------------------------------
+// UI
+// ------------------------------------------------------------
+document.getElementById('btnRegenerate').addEventListener('click', () => {
+  generateWorld(Math.floor(Math.random() * 1e9));
+  render();
+});
+
+document.getElementById('btnLabels').addEventListener('click', (e) => {
+  state.showLabels = !state.showLabels;
+  e.target.classList.toggle('active', state.showLabels);
+  render();
+});
+
+document.getElementById('btnGrid').addEventListener('click', (e) => {
+  state.showGrid = !state.showGrid;
+  e.target.classList.toggle('active', state.showGrid);
+  render();
+});
+
+// ------------------------------------------------------------
+// Запуск
+// ------------------------------------------------------------
+resize();
+generateWorld(42);
+state.camera.x = MAP_W / 2;
+state.camera.y = MAP_H / 2;
+render();
+</script>
 </body>
 </html>
