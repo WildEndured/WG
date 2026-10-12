@@ -1,224 +1,142 @@
-/* =========================================================
-   ГЛОБАЛЬНАЯ КАРТА ДЛЯ ВАРГЕЙМА
-   ========================================================= */
+// ---- Состояние игры ----
+const state = {
+  turn: 1,
+  player: 'Игрок 1',
+  resources: 1000,
+  regions: [],
+  selectedId: null,
+};
 
-// ---------- 1. Инициализация карты ----------
-const map = L.map('map', {
-    center: [48.5, 31.0],
-    zoom: 5,
+let map, regionLayers = {};
+
+// ---- Инициализация карты ----
+function initMap() {
+  map = L.map('map', {
+    center: [20, 0],
+    zoom: 2,
     minZoom: 2,
-    maxZoom: 12,
+    maxZoom: 5,
     worldCopyJump: true,
-    zoomControl: true
-});
+    attributionControl: false,
+  });
 
-// Тайлы (тёмная тема CartoDB)
-L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-    attribution: '&copy; OpenStreetMap &copy; CARTO',
+  // Тёмная подложка (без внешних ключей)
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
     subdomains: 'abcd',
-    maxZoom: 19
-}).addTo(map);
-
-// ---------- 2. Данные территорий и юнитов ----------
-const territories = {
-    kyiv:    { name: 'Киевская зона',    owner: 'blue',   troops: 12, supply: 85, lat: 50.45, lng: 30.52, flag: '🔵' },
-    kharkiv: { name: 'Харьковский сектор', owner: 'red',  troops: 8,  supply: 60, lat: 49.99, lng: 36.23, flag: '🔴' },
-    odesa:   { name: 'Одесский порт',    owner: 'blue',   troops: 6,  supply: 90, lat: 46.48, lng: 30.73, flag: '🔵' },
-    lviv:    { name: 'Львовский округ',  owner: 'green',  troops: 5,  supply: 70, lat: 49.84, lng: 24.03, flag: '🟢' },
-    dnipro:  { name: 'Днепровский узел', owner: 'red',    troops: 10, supply: 55, lat: 48.46, lng: 35.05, flag: '🔴' },
-    crimea:  { name: 'Крымский плацдарм', owner: 'yellow', troops: 15, supply: 95, lat: 45.30, lng: 34.40, flag: '🟡' }
-};
-
-const factionColors = {
-    blue:   '#1f6feb',
-    red:    '#da3633',
-    green:  '#238636',
-    yellow: '#d29922'
-};
-
-// ---------- 3. Слои ----------
-const unitsLayer   = L.layerGroup().addTo(map);
-const gridLayer    = L.layerGroup();
-let selectedKey    = null;
-let markers        = {};
-
-// ---------- 4. Отрисовка юнитов ----------
-function renderUnits() {
-    unitsLayer.clearLayers();
-    markers = {};
-
-    Object.entries(territories).forEach(([key, t]) => {
-        const icon = L.divIcon({
-            className: '',
-            html: `<div class="unit-marker faction-${t.owner}">${t.troops}</div>`,
-            iconSize: [34, 34],
-            iconAnchor: [17, 17]
-        });
-
-        const marker = L.marker([t.lat, t.lng], { icon })
-            .bindTooltip(`${t.name} — ${t.troops} ед.`, { direction: 'top' })
-            .on('click', () => selectTerritory(key));
-
-        marker.addTo(unitsLayer);
-        markers[key] = marker;
-    });
+    maxZoom: 19,
+  }).addTo(map);
 }
 
-// ---------- 5. Обработка выбора территории ----------
-function selectTerritory(key) {
-    selectedKey = key;
-    const t = territories[key];
-    const info = document.getElementById('info');
-
-    info.innerHTML = `
-        <div class="flag">${t.flag}</div>
-        <div class="row"><span>Регион</span><span class="value">${t.name}</span></div>
-        <div class="row"><span>Владелец</span><span class="value" style="color:${factionColors[t.owner]}">${t.owner.toUpperCase()}</span></div>
-        <div class="row"><span>Войска</span><span class="value">${t.troops}</span></div>
-        <div class="row"><span>Снабжение</span><span class="value">${t.supply}%</span></div>
-    `;
-
-    // Подсветка выбранного маркера
-    Object.values(markers).forEach(m => m.setZIndexOffset(0));
-    markers[key].setZIndexOffset(1000);
-
-    addLog(`Выбран регион: ${t.name}`);
+// ---- Цвет по владельцу ----
+function ownerClass(owner) {
+  if (owner === 'Игрок 1') return 'region-p1';
+  if (owner === 'Игрок 2') return 'region-p2';
+  return 'region-neutral';
 }
 
-// ---------- 6. Действия ----------
-function attack() {
-    if (!selectedKey) return addLog('⚠️ Сначала выберите регион');
-    const t = territories[selectedKey];
-
-    // Находим ближайшего врага
-    const enemies = Object.entries(territories).filter(([k, v]) => v.owner !== t.owner);
-    if (!enemies.length) return addLog('Нет врагов для атаки');
-
-    const [enemyKey, enemy] = enemies.sort((a, b) =>
-        dist(t, a[1]) - dist(t, b[1])
-    )[0];
-
-    // Простая боёвка: сила = войска * мораль(random)
-    const attackPower = t.troops * (0.7 + Math.random() * 0.6);
-    const defPower    = enemy.troops * (0.8 + Math.random() * 0.5);
-
-    if (attackPower > defPower) {
-        const loss = Math.ceil(t.troops * 0.3);
-        t.troops   = Math.max(1, t.troops - loss);
-        enemy.owner = t.owner;
-        enemy.troops = Math.max(1, Math.floor(enemy.troops * 0.5));
-        enemy.flag = t.flag;
-        addLog(`⚔️ ${t.name} захватил ${enemy.name}! Потери: ${loss}`);
-    } else {
-        t.troops = Math.max(1, Math.floor(t.troops * 0.7));
-        addLog(`🛡️ ${enemy.name} отбил атаку. Потери: ${t.troops}`);
-    }
-
-    renderUnits();
-    refreshInfo();
+// ---- Загрузка регионов ----
+async function loadRegions() {
+  const res = await fetch('data/regions.json');
+  state.regions = await res.json();
+  renderRegions();
 }
 
+function renderRegions() {
+  // Очистка старых слоёв
+  Object.values(regionLayers).forEach(l => map.removeLayer(l));
+  regionLayers = {};
+
+  state.regions.forEach(r => {
+    const layer = L.polygon(r.polygon, {
+      className: ownerClass(r.owner),
+      weight: 2,
+      color: '#2e3440',
+      fillOpacity: 0.55,
+    }).addTo(map);
+
+    layer.on('click', () => selectRegion(r.id));
+    layer.bindTooltip(r.name, { sticky: true });
+
+    regionLayers[r.id] = layer;
+  });
+}
+
+// ---- Выбор региона ----
+function selectRegion(id) {
+  state.selectedId = id;
+  const r = state.regions.find(x => x.id === id);
+  if (!r) return;
+
+  document.getElementById('region-name').textContent = r.name;
+  document.getElementById('region-owner').textContent = r.owner;
+  document.getElementById('region-resources').textContent = r.resources;
+  document.getElementById('region-units').textContent = r.units;
+  document.getElementById('selected-region').textContent = r.name;
+
+  // Подсветка
+  Object.entries(regionLayers).forEach(([rid, layer]) => {
+    layer.setStyle({ weight: rid === id ? 4 : 2, color: rid === id ? '#ebcb8b' : '#2e3440' });
+  });
+}
+
+// ---- Действия ----
 function moveTroops() {
-    if (!selectedKey) return addLog('⚠️ Сначала выберите регион');
-    const t = territories[selectedKey];
-    if (t.troops < 2) return addLog('⚠️ Недостаточно войск для переброски');
+  const r = state.regions.find(x => x.id === state.selectedId);
+  if (!r) return alert('Выберите регион');
+  if (r.owner !== state.player) return alert('Это не ваш регион!');
+  if (r.units < 1) return alert('Нет войск для перемещения');
 
-    // Ищем союзника рядом
-    const allies = Object.entries(territories)
-        .filter(([k, v]) => k !== selectedKey && v.owner === t.owner);
-    if (!allies.length) return addLog('Нет союзных регионов');
+  const target = prompt('Введите ID региона для перемещения:');
+  const t = state.regions.find(x => x.id === target);
+  if (!t) return alert('Регион не найден');
 
-    const [, ally] = allies.sort((a, b) => dist(t, a[1]) - dist(t, b[1]))[0];
-    const send = Math.floor(t.troops / 2);
-    t.troops -= send;
-    ally.troops += send;
+  const amount = parseInt(prompt('Сколько войск переместить?', '1'), 10);
+  if (!amount || amount < 1 || amount > r.units) return alert('Некорректное число');
 
-    addLog(`🚀 Переброшено ${send} ед. в ${ally.name}`);
-    renderUnits();
-    refreshInfo();
-}
+  r.units -= amount;
 
-function fortify() {
-    if (!selectedKey) return addLog('⚠️ Сначала выберите регион');
-    const t = territories[selectedKey];
-    if (t.supply < 10) return addLog('⚠️ Недостаточно снабжения');
-
-    t.supply -= 10;
-    t.troops += 2;
-    addLog(`🛡️ ${t.name} укреплён: +2 войск, -10 снабжения`);
-    renderUnits();
-    refreshInfo();
-}
-
-function resetGame() {
-    territories.kyiv.owner = 'blue';
-    territories.kharkiv.owner = 'red';
-    territories.odesa.owner = 'blue';
-    territories.lviv.owner = 'green';
-    territories.dnipro.owner = 'red';
-    territories.crimea.owner = 'yellow';
-
-    const initial = { kyiv: 12, kharkiv: 8, odesa: 6, lviv: 5, dnipro: 10, crimea: 15 };
-    const flags = { blue: '🔵', red: '🔴', green: '🟢', yellow: '🟡' };
-
-    Object.entries(territories).forEach(([k, t]) => {
-        t.troops = initial[k];
-        t.supply = Math.floor(60 + Math.random() * 35);
-        t.flag = flags[t.owner];
-    });
-
-    addLog('🔄 Игра сброшена');
-    renderUnits();
-    refreshInfo();
-}
-
-// ---------- 7. Вспомогательные ----------
-function dist(a, b) {
-    return Math.hypot(a.lat - b.lat, a.lng - b.lng);
-}
-
-function addLog(msg) {
-    const log = document.getElementById('log');
-    const li = document.createElement('li');
-    const time = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
-    li.textContent = `[${time}] ${msg}`;
-    log.prepend(li);
-    if (log.children.length > 30) log.lastChild.remove();
-}
-
-function refreshInfo() {
-    if (selectedKey) selectTerritory(selectedKey);
-}
-
-// ---------- 8. Сетка координат ----------
-function buildGrid() {
-    gridLayer.clearLayers();
-    for (let lat = -80; lat <= 80; lat += 10) {
-        L.polyline([[-80, lat * 3], [80, lat * 3]], { color: '#21262d', weight: 0.5 }).addTo(gridLayer);
+  if (t.owner === r.owner) {
+    t.units += amount;
+  } else {
+    // Бой: простое сравнение сил
+    if (amount > t.units) {
+      const survivors = amount - t.units;
+      t.owner = r.owner;
+      t.units = survivors;
+    } else {
+      t.units -= amount;
     }
-    for (let lng = -180; lng <= 180; lng += 10) {
-        L.polyline([[-80, lng], [80, lng]], { color: '#21262d', weight: 0.5 }).addTo(gridLayer);
-    }
+  }
+
+  renderRegions();
+  selectRegion(state.selectedId);
 }
 
-// ---------- 9. Привязка UI ----------
-document.getElementById('btn-attack').onclick  = attack;
-document.getElementById('btn-move').onclick    = moveTroops;
-document.getElementById('btn-fortify').onclick = fortify;
-document.getElementById('btn-reset').onclick   = resetGame;
+function endTurn() {
+  // Смена игрока и хода
+  state.player = state.player === 'Игрок 1' ? 'Игрок 2' : 'Игрок 1';
+  state.turn += 1;
 
-document.getElementById('toggle-units').onchange = e => {
-    e.target.checked ? map.addLayer(unitsLayer) : map.removeLayer(unitsLayer);
-};
-document.getElementById('toggle-grid').onchange = e => {
-    e.target.checked ? map.addLayer(gridLayer) : map.removeLayer(gridLayer);
-};
-document.getElementById('toggle-borders').onchange = e => {
-    // пример: можно показать слой границ (заглушка)
-    addLog(`Границы: ${e.target.checked ? 'вкл' : 'выкл'}`);
-};
+  // Доход с регионов
+  state.regions.forEach(r => {
+    if (r.owner === state.player) {
+      state.resources += Math.floor(r.resources / 10);
+      r.resources += 5;
+    }
+  });
 
-// ---------- 10. Старт ----------
-buildGrid();
-renderUnits();
-addLog('Карта готова. Выберите регион.');
+  document.getElementById('turn').textContent = state.turn;
+  document.getElementById('player').textContent = state.player;
+  document.getElementById('resources').textContent = state.resources;
+
+  renderRegions();
+}
+
+// ---- Запуск ----
+window.addEventListener('DOMContentLoaded', async () => {
+  initMap();
+  await loadRegions();
+
+  document.getElementById('btn-move').onclick = moveTroops;
+  document.getElementById('btn-end-turn').onclick = endTurn;
+});
