@@ -1,0 +1,151 @@
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    background: #0d1117;
+    color: #e6edf3;
+    overflow: hidden;
+}
+
+#app {
+    display: flex;
+    height: 100vh;
+    width: 100vw;
+}
+
+/* ---------- Sidebar ---------- */
+#sidebar {
+    width: 320px;
+    background: #161b22;
+    border-right: 1px solid #30363d;
+    padding: 16px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+#sidebar h1 {
+    font-size: 20px;
+    color: #f0b429;
+    border-bottom: 1px solid #30363d;
+    padding-bottom: 10px;
+}
+
+.panel {
+    background: #0d1117;
+    border: 1px solid #30363d;
+    border-radius: 8px;
+    padding: 12px;
+}
+
+.panel h2 {
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: #8b949e;
+    margin-bottom: 10px;
+}
+
+.muted { color: #6e7681; font-size: 13px; }
+
+#info .row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 14px;
+    padding: 4px 0;
+    border-bottom: 1px dashed #21262d;
+}
+#info .row:last-child { border-bottom: none; }
+#info .value { font-weight: 600; }
+
+.flag { font-size: 22px; margin-bottom: 6px; display: inline-block; }
+
+/* ---------- Buttons ---------- */
+.action {
+    width: 100%;
+    padding: 9px 12px;
+    margin-top: 6px;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    background: #21262d;
+    color: #e6edf3;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all .15s;
+    text-align: left;
+}
+.action:hover { background: #30363d; transform: translateX(3px); }
+.action.attack  { border-left: 3px solid #f85149; }
+.action.move    { border-left: 3px solid #58a6ff; }
+.action.fortify { border-left: 3px solid #3fb950; }
+.action.reset   { border-left: 3px solid #8b949e; }
+.action:disabled { opacity: .4; cursor: not-allowed; transform: none; }
+
+/* ---------- Checkboxes ---------- */
+label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    padding: 4px 0;
+    cursor: pointer;
+}
+input[type="checkbox"] { accent-color: #f0b429; }
+
+/* ---------- Log ---------- */
+#log {
+    list-style: none;
+    font-size: 12px;
+    max-height: 160px;
+    overflow-y: auto;
+}
+#log li {
+    padding: 4px 0;
+    border-bottom: 1px dashed #21262d;
+    color: #c9d1d9;
+}
+#log li::before { content: "▸ "; color: #f0b429; }
+
+/* ---------- Map ---------- */
+#map {
+    flex: 1;
+    height: 100%;
+    background: #0d1117;
+}
+
+/* Тёмная тема для Leaflet */
+.leaflet-container { background: #0d1117; }
+.leaflet-control-zoom a {
+    background: #161b22 !important;
+    color: #e6edf3 !important;
+    border-color: #30363d !important;
+}
+.leaflet-popup-content-wrapper,
+.leaflet-popup-tip {
+    background: #161b22;
+    color: #e6edf3;
+    border: 1px solid #30363d;
+}
+
+/* ---------- Кастомные маркеры ---------- */
+.unit-marker {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    font-size: 14px;
+    font-weight: 700;
+    color: #fff;
+    border: 2px solid #0d1117;
+    box-shadow: 0 0 10px rgba(0,0,0,.6);
+    cursor: pointer;
+    transition: transform .15s;
+}
+.unit-marker:hover { transform: scale(1.15); }
+.faction-blue   { background: #1f6feb; }
+.faction-red    { background: #da3633; }
+.faction-green  { background: #238636; }
+.faction-yellow { background: #d29922; color:#000; }
